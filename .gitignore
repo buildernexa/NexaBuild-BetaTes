@@ -1,0 +1,14 @@
+# Local secrets and build outputs
+.env
+.env.*
+!.env.example
+.vercel/
+node_modules/
+dist/
+build/
+out/
+www/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db

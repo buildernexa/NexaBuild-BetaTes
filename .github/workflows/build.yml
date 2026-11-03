@@ -1,0 +1,421 @@
+name: NexaBuild Build APK
+run-name: NexaBuild Build - ${{ inputs.upload_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_id:
+        description: Unique NexaBuilder upload ID
+        required: true
+        type: string
+      upload_ref:
+        description: Temporary branch containing upload chunks
+        required: true
+        type: string
+      archive_size:
+        description: Original ZIP size in bytes
+        required: true
+        type: string
+      archive_sha256:
+        description: SHA-256 checksum of the original ZIP
+        required: true
+        type: string
+      chunk_count:
+        description: Number of upload parts
+        required: true
+        type: string
+      app_name:
+        description: Android app name
+        required: true
+        type: string
+      package_id:
+        description: Android application ID
+        required: true
+        type: string
+      app_version:
+        description: Android version name
+        required: true
+        type: string
+      version_code:
+        description: Android version code
+        required: true
+        type: string
+      internet_mode:
+        description: Allow Internet access in the generated Android app
+        required: false
+        default: 'online'
+        type: choice
+        options: ['online', 'offline']
+      camera_permission:
+        description: Add Android camera permission
+        required: false
+        default: false
+        type: boolean
+      wake_lock:
+        description: Keep the Android screen awake while the app is open
+        required: false
+        default: false
+        type: boolean
+      vibrate_permission:
+        description: Add Android vibration permission
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: nexabuilder-${{ inputs.upload_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate website and build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      UPLOAD_ID: ${{ inputs.upload_id }}
+      UPLOAD_REF: ${{ inputs.upload_ref }}
+      ARCHIVE_SIZE: ${{ inputs.archive_size }}
+      ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+      CHUNK_COUNT: ${{ inputs.chunk_count }}
+      APP_NAME: ${{ inputs.app_name }}
+      PACKAGE_ID: ${{ inputs.package_id }}
+      APP_VERSION: ${{ inputs.app_version }}
+      VERSION_CODE: ${{ inputs.version_code }}
+      INTERNET_MODE: ${{ inputs.internet_mode }}
+      CAMERA_PERMISSION: ${{ inputs.camera_permission }}
+      WAKE_LOCK: ${{ inputs.wake_lock }}
+      VIBRATE_PERMISSION: ${{ inputs.vibrate_permission }}
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout builder (without persisting Git credentials)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys
+          rules = {
+              "UPLOAD_ID": r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "UPLOAD_REF": r"^nexabuilder-upload-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "ARCHIVE_SHA256": r"^[0-9a-f]{64}$",
+              "PACKAGE_ID": r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$",
+              "APP_VERSION": r"^\d+(\.\d+){0,3}$",
+              "VERSION_CODE": r"^[1-9]\d{0,9}$",
+          }
+          for key, pattern in rules.items():
+              value = os.environ.get(key, "")
+              if not re.fullmatch(pattern, value, re.I if key in ("UPLOAD_ID", "UPLOAD_REF") else 0):
+                  print(f"Input {key} tidak valid; workflow dihentikan sebelum kompilasi.", file=sys.stderr)
+                  raise SystemExit(2)
+          name = os.environ.get("APP_NAME", "").strip()
+          if not name or len(name) > 48 or any(ord(c) < 32 or c in "<>" for c in name):
+              print("APP_NAME tidak valid; gunakan 1–48 karakter tanpa karakter kontrol.", file=sys.stderr)
+              raise SystemExit(2)
+          try:
+              code = int(os.environ["VERSION_CODE"])
+              if code < 1 or code > 2100000000: raise ValueError()
+          except ValueError:
+              print("VERSION_CODE berada di luar rentang Android.", file=sys.stderr)
+              raise SystemExit(2)
+          try:
+              size = int(os.environ.get("ARCHIVE_SIZE", "0"))
+              chunks = int(os.environ.get("CHUNK_COUNT", "0"))
+          except ValueError:
+              size, chunks = 0, 0
+          expected_chunks = (size + (2 * 1024 * 1024) - 1) // (2 * 1024 * 1024)
+          if size < 1 or size > 40 * 1024 * 1024 or chunks != expected_chunks or chunks < 1 or chunks > 20:
+              print("ARCHIVE_SIZE/CHUNK_COUNT tidak konsisten atau di luar batas upload.", file=sys.stderr)
+              raise SystemExit(2)
+          print("Input build dan metadata arsip valid.")
+          PY
+
+      - name: Fetch uploaded ZIP from the temporary branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          git -c http.extraheader="AUTHORIZATION: basic ${auth}" fetch --no-tags origin "refs/heads/${UPLOAD_REF}:refs/remotes/origin/${UPLOAD_REF}"
+          unset auth GH_TOKEN
+          git archive "refs/remotes/origin/${UPLOAD_REF}" ".nexabuilder/incoming/${UPLOAD_ID}" | tar -x
+          upload_dir=".nexabuilder/incoming/${UPLOAD_ID}"
+          python3 scripts/reassemble_upload.py \
+            --upload-dir "$upload_dir" \
+            --output "$RUNNER_TEMP/nexabuilder-project.zip" \
+            --upload-id "$UPLOAD_ID" \
+            --expected-size "$ARCHIVE_SIZE" \
+            --expected-sha256 "$ARCHIVE_SHA256" \
+            --expected-chunks "$CHUNK_COUNT"
+          if [[ -f "${upload_dir}/icon.bin" ]]; then
+            cp "$upload_dir/icon.bin" "$RUNNER_TEMP/nexabuilder-icon.bin"
+          fi
+          echo "ZIP asli telah disusun ulang dan checksum SHA-256 cocok; konten belum dieksekusi."
+
+      - name: Install Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$ANDROID_HOME" ]]; then
+            echo "Android SDK tidak ditemukan di runner." >&2
+            exit 2
+          fi
+          sdkmanager=""
+          if [[ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]]; then
+            sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          else
+            sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          if [[ -z "$sdkmanager" || ! -x "$sdkmanager" ]]; then
+            echo "sdkmanager tidak ditemukan dalam Android SDK." >&2
+            exit 2
+          fi
+          "$sdkmanager" --licenses < <(yes)
+          "$sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
+          echo "=== BUILD TOOLCHAIN ==="
+          java -version
+          node --version
+          npm --version
+          python3 --version
+          "$sdkmanager" --version
+
+      - name: Install icon image processor
+        run: python3 -m pip install --disable-pip-version-check --no-cache-dir -r scripts/requirements.txt
+
+      - name: Run NexaBuild regression and configuration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+          npm test
+          python3 scripts/write_capacitor_config.py --help >/dev/null
+
+      - name: Validate ZIP and prepare static website
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_site.py --zip "$RUNNER_TEMP/nexabuilder-project.zip" --out "$RUNNER_TEMP/nexabuilder-www"
+
+      - name: Enable offline cache when selected
+        if: inputs.internet_mode == 'offline'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/enable_offline.py "$RUNNER_TEMP/nexabuilder-www"
+
+      - name: Create Capacitor Android wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="$RUNNER_TEMP/nexabuilder-app"
+          mkdir -p "$APP_DIR"
+          cp -a "$RUNNER_TEMP/nexabuilder-www" "$APP_DIR/www"
+          cd "$APP_DIR"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --save-exact \
+            @capacitor/core@8.6.0 \
+            @capacitor/android@8.6.0 \
+            @capacitor/cli@8.6.0
+          # Capacitor supports JSON configuration. Do not generate a .ts file,
+          # because that would require a TypeScript dependency in this wrapper.
+          python3 "$GITHUB_WORKSPACE/scripts/write_capacitor_config.py" \
+            --app-id "$PACKAGE_ID" \
+            --app-name "$APP_NAME" \
+            --web-dir www \
+            --output capacitor.config.json
+          test -s capacitor.config.json
+          test ! -e capacitor.config.ts
+          node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('capacitor.config.json','utf8')); if(c.appId!==process.env.PACKAGE_ID||c.appName!==process.env.APP_NAME||c.webDir!=='www') process.exit(2); console.log('Capacitor JSON config verified.');"
+          npx cap --version
+          npx cap add android
+          npx cap sync android
+          if [[ ! -f android/gradlew ]]; then
+            echo "Gradle wrapper tidak dibuat oleh template Capacitor." >&2
+            exit 2
+          fi
+          chmod +x android/gradlew
+          echo "NEXABUILDER_APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "Capacitor Android project created and synchronized."
+
+      - name: Configure Android identity and launcher icons
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${NEXABUILDER_APP_DIR:?Capacitor wrapper directory was not exported}"
+          ICON_ARGS=()
+          if [[ -f "$RUNNER_TEMP/nexabuilder-icon.bin" ]]; then ICON_ARGS=(--source "$RUNNER_TEMP/nexabuilder-icon.bin"); fi
+          CONFIG_ARGS=(
+            --android-dir "$NEXABUILDER_APP_DIR/android"
+            --app-name "$APP_NAME"
+            --package-id "$PACKAGE_ID"
+            --version "$APP_VERSION"
+            --version-code "$VERSION_CODE"
+            --internet-mode "$INTERNET_MODE"
+          )
+          [[ "$CAMERA_PERMISSION" == "true" ]] && CONFIG_ARGS+=(--camera)
+          [[ "$WAKE_LOCK" == "true" ]] && CONFIG_ARGS+=(--wake-lock)
+          [[ "$VIBRATE_PERMISSION" == "true" ]] && CONFIG_ARGS+=(--vibrate)
+          python3 "$GITHUB_WORKSPACE/scripts/configure_android.py" "${CONFIG_ARGS[@]}"
+          python3 "$GITHUB_WORKSPACE/scripts/generate_android_icons.py" \
+            --android-dir "$NEXABUILDER_APP_DIR/android" "${ICON_ARGS[@]}"
+
+      - name: Compile Android APK with Gradle
+        shell: bash
+        env:
+          NEXABUILD_KEYSTORE_BASE64: ${{ secrets.NEXABUILD_KEYSTORE_BASE64 }}
+          NEXABUILD_KEYSTORE_PASSWORD: ${{ secrets.NEXABUILD_KEYSTORE_PASSWORD }}
+          NEXABUILD_KEY_ALIAS: ${{ secrets.NEXABUILD_KEY_ALIAS }}
+          NEXABUILD_KEY_PASSWORD: ${{ secrets.NEXABUILD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd "$NEXABUILDER_APP_DIR/android"
+          echo "=== GRADLE WRAPPER ==="
+          ./gradlew --version
+          signing_values=("${NEXABUILD_KEYSTORE_BASE64:-}" "${NEXABUILD_KEYSTORE_PASSWORD:-}" "${NEXABUILD_KEY_ALIAS:-}" "${NEXABUILD_KEY_PASSWORD:-}")
+          configured=0
+          for value in "${signing_values[@]}"; do [[ -n "$value" ]] && ((configured+=1)); done
+          unset value signing_values
+          if [[ "$configured" -ne 0 && "$configured" -ne 4 ]]; then
+            echo "Secrets signing belum lengkap. Isi keempat secret signing atau kosongkan semuanya untuk APK debug." >&2
+            exit 2
+          fi
+          if [[ "$configured" -eq 4 ]]; then
+            if ! printf '%s' "$NEXABUILD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/nexabuild-release.jks"; then
+              echo "Secret keystore bukan Base64 yang valid." >&2
+              exit 2
+            fi
+            if [[ ! -s "$RUNNER_TEMP/nexabuild-release.jks" ]] || ! keytool -list -keystore "$RUNNER_TEMP/nexabuild-release.jks" -storepass "$NEXABUILD_KEYSTORE_PASSWORD" -alias "$NEXABUILD_KEY_ALIAS" >/dev/null 2>&1; then
+              echo "Keystore, password, atau alias tidak cocok. Nilai secret tidak akan ditampilkan." >&2
+              exit 2
+            fi
+            ./gradlew --no-daemon --stacktrace assembleRelease \
+              -Pandroid.injected.signing.store.file="$RUNNER_TEMP/nexabuild-release.jks" \
+              -Pandroid.injected.signing.store.password="$NEXABUILD_KEYSTORE_PASSWORD" \
+              -Pandroid.injected.signing.key.alias="$NEXABUILD_KEY_ALIAS" \
+              -Pandroid.injected.signing.key.password="$NEXABUILD_KEY_PASSWORD"
+            apk="$NEXABUILDER_APP_DIR/android/app/build/outputs/apk/release/app-release.apk"
+            release_type="release-signed"
+          else
+            ./gradlew --no-daemon --stacktrace assembleDebug
+            apk="$NEXABUILDER_APP_DIR/android/app/build/outputs/apk/debug/app-debug.apk"
+            release_type="debug"
+          fi
+          if [[ ! -s "$apk" ]]; then
+            echo "Gradle selesai tetapi file APK tidak ditemukan pada lokasi yang diharapkan: $apk" >&2
+            exit 2
+          fi
+          cp "$apk" "$RUNNER_TEMP/nexabuilder-raw.apk"
+          printf '%s\n' "$release_type" > "$RUNNER_TEMP/nexabuilder-build-type.txt"
+          echo "APK build output exists: $(stat -c '%s' "$RUNNER_TEMP/nexabuilder-raw.apk") bytes."
+
+      - name: Verify APK signature and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$RUNNER_TEMP/nexabuilder-raw.apk"
+          test -s "$apk"
+          release_type="$(cat "$RUNNER_TEMP/nexabuilder-build-type.txt")"
+          [[ "$release_type" == "debug" || "$release_type" == "release-signed" ]]
+          VERIFY_ARGS=(
+            --apk "$apk"
+            --package-id "$PACKAGE_ID"
+            --version "$APP_VERSION"
+            --version-code "$VERSION_CODE"
+            --internet-mode "$INTERNET_MODE"
+            --build-tools "$ANDROID_HOME/build-tools/36.0.0"
+          )
+          [[ "$CAMERA_PERMISSION" == "true" ]] && VERIFY_ARGS+=(--camera)
+          [[ "$WAKE_LOCK" == "true" ]] && VERIFY_ARGS+=(--wake-lock)
+          [[ "$VIBRATE_PERMISSION" == "true" ]] && VERIFY_ARGS+=(--vibrate)
+          python3 "$GITHUB_WORKSPACE/scripts/verify_apk.py" "${VERIFY_ARGS[@]}"
+          mkdir -p "$RUNNER_TEMP/nexabuilder-output"
+          cp "$apk" "$RUNNER_TEMP/nexabuilder-output/NexaBuild.apk"
+          printf '%s\n' "$release_type" > "$RUNNER_TEMP/nexabuilder-output/BUILD_TYPE.txt"
+          echo "NEXABUILDER_RELEASE_TYPE=$release_type" >> "$GITHUB_ENV"
+          sha256sum "$RUNNER_TEMP/nexabuilder-output/NexaBuild.apk" | tee "$RUNNER_TEMP/nexabuilder-output/SHA256SUMS.txt"
+          echo "APK signature and metadata verification passed."
+
+      - name: Upload APK artifact (7-day retention)
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexabuild-${{ inputs.upload_id }}
+          path: |
+            ${{ runner.temp }}/nexabuilder-output/NexaBuild.apk
+            ${{ runner.temp }}/nexabuilder-output/SHA256SUMS.txt
+            ${{ runner.temp }}/nexabuilder-output/BUILD_TYPE.txt
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Publish APK as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TYPE: ${{ env.NEXABUILDER_RELEASE_TYPE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="nexabuild-${UPLOAD_ID}"
+          apk="$RUNNER_TEMP/nexabuilder-output/NexaBuild.apk"
+          checksum="$RUNNER_TEMP/nexabuilder-output/SHA256SUMS.txt"
+          build_type="$RUNNER_TEMP/nexabuilder-output/BUILD_TYPE.txt"
+          gh release create "$tag" "$apk#NexaBuild-${UPLOAD_ID}.apk" "$checksum#SHA256SUMS.txt" "$build_type#BUILD_TYPE.txt" \
+            --title "${APP_NAME} ${APP_VERSION}" \
+            --notes "APK NexaBuild. Package: ${PACKAGE_ID}. Build ID: ${UPLOAD_ID}. Build type: ${RELEASE_TYPE}." \
+            --target "$GITHUB_SHA"
+          echo "GitHub Release tersedia: $tag"
+
+      - name: Remove temporary upload branch
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set +e
+          if [[ ! "$UPLOAD_REF" =~ ^nexabuilder-upload-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+            echo "Temporary branch name failed validation; cleanup skipped."
+            exit 0
+          fi
+          status="$(curl -sS -o "$RUNNER_TEMP/nexabuilder-branch-delete.json" -w '%{http_code}' \
+            -X DELETE \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/git/refs/heads/${UPLOAD_REF}")"
+          if [[ "$status" == "204" || "$status" == "404" ]]; then
+            echo "Temporary upload branch cleanup: HTTP $status."
+          else
+            echo "Peringatan: branch upload belum dapat dihapus otomatis (HTTP $status). Hapus branch ${UPLOAD_REF} secara manual jika perlu."
+            cat "$RUNNER_TEMP/nexabuilder-branch-delete.json" || true
+          fi
