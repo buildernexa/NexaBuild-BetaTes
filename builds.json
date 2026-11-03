@@ -1,1 +1,216 @@
-[]
+[
+  {
+    "id": "ea21269b-34ed-4416-9f60-81c5bc12166d",
+    "jobId": null,
+    "projectId": "p-1793695092556-1vd47l",
+    "filename": "Sample-Web-Project.zip",
+    "uploadFilename": "nexates-prepared.zip",
+    "appName": "NexaTes",
+    "appId": "com.nexa.nexates",
+    "version": "1.0.0",
+    "versionCode": "1",
+    "detectedType": "Website / HTML",
+    "prepared": true,
+    "metadataApplied": true,
+    "projectType": "Website / HTML",
+    "sourceZipBytes": 1266,
+    "preparedZipBytes": 1257,
+    "projectFileCount": 1,
+    "preparedFileCount": 1,
+    "status": "success",
+    "createdAt": 1793695134398,
+    "startedAt": 1793695134398,
+    "engineUrl": "https://apkit.onrender.com",
+    "error": null,
+    "downloadUrl": null,
+    "progress": 100,
+    "iconDataUrl": "data:image/png;base64,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",
+    "buildOptions": {
+      "internetMode": "online",
+      "camera": false,
+      "wakeLock": false,
+      "vibrate": false
+    },
+    "estimateLowMs": 480000,
+    "estimateHighMs": 840000,
+    "estimateBasis": "initial-heuristic",
+    "uploadProgress": 100,
+    "githubUploadRef": "nexabuilder-upload-ea21269b-34ed-4416-9f60-81c5bc12166d",
+    "githubCommit": "484a600a5ee3be98847c8e45dab3e7c5deb95fdf",
+    "githubRepo": "buildernexa/NexaBuild-BetaTes",
+    "githubRunId": 41604857690,
+    "githubRunUrl": "https://github.com/buildernexa/NexaBuild-BetaTes/actions/runs/41604857690",
+    "workflowSteps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:08Z",
+        "completed_at": "2026-11-03T08:39:09Z"
+      },
+      {
+        "name": "Checkout builder (without persisting Git credentials)",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:09Z",
+        "completed_at": "2026-11-03T08:39:10Z"
+      },
+      {
+        "name": "Validate build inputs",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:10Z",
+        "completed_at": "2026-11-03T08:39:10Z"
+      },
+      {
+        "name": "Fetch uploaded ZIP from the temporary branch",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:10Z",
+        "completed_at": "2026-11-03T08:39:10Z"
+      },
+      {
+        "name": "Install Java 21",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:10Z",
+        "completed_at": "2026-11-03T08:39:11Z"
+      },
+      {
+        "name": "Install Node.js 22",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:11Z",
+        "completed_at": "2026-11-03T08:39:13Z"
+      },
+      {
+        "name": "Install Python 3.12",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:13Z",
+        "completed_at": "2026-11-03T08:39:14Z"
+      },
+      {
+        "name": "Prepare Android SDK",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:14Z",
+        "completed_at": "2026-11-03T08:39:24Z"
+      },
+      {
+        "name": "Install icon image processor",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:24Z",
+        "completed_at": "2026-11-03T08:39:25Z"
+      },
+      {
+        "name": "Run NexaBuild regression and configuration tests",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:25Z",
+        "completed_at": "2026-11-03T08:39:28Z"
+      },
+      {
+        "name": "Validate ZIP and prepare static website",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:28Z",
+        "completed_at": "2026-11-03T08:39:28Z"
+      },
+      {
+        "name": "Enable offline cache when selected",
+        "status": "completed",
+        "conclusion": "skipped",
+        "started_at": "2026-11-03T08:39:28Z",
+        "completed_at": "2026-11-03T08:39:28Z"
+      },
+      {
+        "name": "Create Capacitor Android wrapper",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:28Z",
+        "completed_at": "2026-11-03T08:39:34Z"
+      },
+      {
+        "name": "Configure Android identity and launcher icons",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:34Z",
+        "completed_at": "2026-11-03T08:39:35Z"
+      },
+      {
+        "name": "Compile Android APK with Gradle",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:39:35Z",
+        "completed_at": "2026-11-03T08:41:08Z"
+      },
+      {
+        "name": "Verify APK signature and metadata",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:08Z",
+        "completed_at": "2026-11-03T08:41:08Z"
+      },
+      {
+        "name": "Upload APK artifact (7-day retention)",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:08Z",
+        "completed_at": "2026-11-03T08:41:11Z"
+      },
+      {
+        "name": "Publish APK as GitHub Release asset",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:11Z",
+        "completed_at": "2026-11-03T08:41:14Z"
+      },
+      {
+        "name": "Remove temporary upload branch",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:14Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      },
+      {
+        "name": "Post Install Python 3.12",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:15Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      },
+      {
+        "name": "Post Install Node.js 22",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:15Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      },
+      {
+        "name": "Post Install Java 21",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:15Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      },
+      {
+        "name": "Post Checkout builder (without persisting Git credentials)",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:15Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-03T08:41:15Z",
+        "completed_at": "2026-11-03T08:41:15Z"
+      }
+    ],
+    "updatedAt": 1793695280723,
+    "username": "buildernexa"
+  }
+]
